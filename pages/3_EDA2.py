@@ -7,10 +7,14 @@ import plotly.graph_objects as go
 from bokeh.plotting import figure
 from bokeh.models import HoverTool, ColumnDataSource
 import plotly.express as px
-from datetime import datetime
+from datetime import datetime, timedelta
+
+def load_data(file_path):
+    data = pd.read_csv(file_path)
+    return data
 
 def main():
-    tab11, tab12, tab13, tab14, tab15 = st.tabs(["상관관계 분석","박스플롯","거래량 변동","등락률 산점도","테스트3"])
+    tab11, tab12, tab13, tab14, tab15 = st.tabs(["상관관계 분석","거래량 Top 주가 변동","거래량 변동","등락률 산점도","테스트3"])
     with tab11:
         df = pd.read_csv('all.csv')
 
@@ -100,7 +104,60 @@ def main():
                     st.pyplot(plt)
                 
     with tab12:
-        df = pd.read_csv('all.csv')
+        
+        # CSV 파일 로드
+        df = load_data('all.csv')
+
+        selected_stock = st.selectbox("종목 선택을 선택해주세요.", df['Name'].unique())
+
+        # 선택한 종목의 데이터 필터링
+        filtered_df = df[df['Name'] == selected_stock]
+        
+        st.markdown('<p style="font-size: 24px; font-weight: bold; color: #336699;">- 거래량과 주가의 관계</p>', unsafe_allow_html=True)
+        st.markdown('<p style="font-size: 18px;">거래량이 증가하면 주가도 상승하는 경향이 있습니다. 반면, 거래량이 감소하면 주가는 하락하는 경향이 있습니다.</p>', unsafe_allow_html=True)
+
+
+
+        st.markdown('<p style="font-size: 24px; font-weight: bold; color: #336699;">- 거래량과 주가의 상관관계 분석</p>', unsafe_allow_html=True)
+        st.markdown('<p style="font-size: 18px;">거래량이 많은 날들 이후에 주가는 어떻게 변화했을까요?</p>', unsafe_allow_html=True)
+
+        st.markdown('')
+        if filtered_df.empty:
+            st.write("선택한 종목에 대한 데이터가 없습니다.")
+        else:
+            st.write(f"- {selected_stock} 종목의 가장 높은 거래량 Top 5의 주가 변화")
+
+            # 가장 높은 Volume 종목 Top 5
+            top_5_stocks = filtered_df.sort_values('Volume', ascending=False).head(5)
+
+            for days in [30, 60, 90, 365]:
+                top_5_stocks[f'Price {days} Days Later'] = None
+                for i, row in top_5_stocks.iterrows():
+                    target_date = pd.to_datetime(row['Date']) + pd.DateOffset(days=days)  # 날짜를 날짜 형식으로 변환
+                    target_date_str = target_date.strftime('%Y-%m-%d')  # 날짜를 문자열로 변환
+                    closest_date = filtered_df.loc[filtered_df['Date'] >= target_date_str, 'Date'].min()
+                    if pd.notnull(closest_date):
+                        closest_date_price = filtered_df.loc[filtered_df['Date'] == closest_date, 'Close'].iloc[0]
+                        top_5_stocks.loc[i, f'Price {days} Days Later'] = closest_date_price
+
+            st.dataframe(top_5_stocks[['Date', 'Volume', 'Close'] + [f'Price {days} Days Later' for days in [30, 60, 90, 365]]])
+            
+            
+            st.write(f"- {selected_stock} 종목의 30, 60, 90, 365일 뒤의 종가 변화")
+            fig = go.Figure()
+
+            for index, row in top_5_stocks.iterrows():
+                volume = row['Volume']
+                price_values = [row[f'Price {days} Days Later'] for days in [30, 60, 90, 365]]
+                fig.add_trace(go.Scatter(x=[30, 60, 90, 365], y=price_values, mode='lines', name=f'Volume: {volume}'))
+
+            fig.update_layout(xaxis_title="Days Later", yaxis_title="Price")
+            #타이틀 설정
+            #title=f"- {selected_stock} 종목의 30, 60, 90, 365일 뒤의 종가 변화", 
+            st.plotly_chart(fig)
+
+
+
 
         # 선택한 종목 리스트
         #selected_stocks = ['삼성전자', '현대차', '포스코', '삼성생명', '셀트리온']
